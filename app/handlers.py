@@ -1,11 +1,11 @@
 from asyncio import sleep, create_task, CancelledError
-import io
 
 from aiogram import F, html, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, BufferedInputFile
 from aiogram.filters import Command, CommandStart, CommandObject
 
 import app.scrapper as scrapper
+import app.table as table
 
 router = Router()
 
@@ -22,15 +22,10 @@ async def long_process(user_id: int, message_id: int):
     try:
         data = STATES[(user_id, message_id)]
         emails = await scrapper.scrappQuery(data["query"], data["limit"])
+        url = await table.initTable(f"{user_id}_{message_id}", emails)
         if STATES.get((user_id, message_id), {}).get("state") == "processing":
-            # csv_file = await scrapper.emailsToCSV(emails)
-            # csv_bytes = io.BytesIO(csv_file.getvalue().encode('utf-8'))
-            await STATES[(user_id, message_id)]["msg"].edit_text(f"Процесс завершен:\n{emails}")
+            await STATES[(user_id, message_id)]["msg"].edit_text(f"Процесс завершен:\n{url}")
             await STATES[(user_id, message_id)]["msg"].edit_reply_markup()
-            # await STATES[(user_id, message_id)]['msg'].bot.send_document(
-            #     document=BufferedInputFile(csv_bytes.getvalue(), filename='data.csv'),
-            #     caption="Процесс завершен. Вот ваш файл CSV."
-            # )
         if (user_id, message_id) in TASKS:
             del TASKS[(user_id, message_id)]
         if (user_id, message_id) in STATES:
