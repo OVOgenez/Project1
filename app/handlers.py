@@ -1,8 +1,11 @@
 from asyncio import sleep, create_task, CancelledError
+import io
 
-from aiogram import types, F, html, Router
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram import F, html, Router
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, BufferedInputFile
 from aiogram.filters import Command, CommandStart, CommandObject
+
+import app.scrapper as scrapper
 
 router = Router()
 
@@ -17,10 +20,17 @@ async def command_start_handler(message: Message) -> None:
 
 async def long_process(user_id: int, message_id: int):
     try:
-        await sleep(5)
+        data = STATES[(user_id, message_id)]
+        emails = await scrapper.scrappQuery(data["query"], data["limit"])
         if STATES.get((user_id, message_id), {}).get("state") == "processing":
-            await STATES[(user_id, message_id)]["msg"].edit_text("Процесс завершен")
+            # csv_file = await scrapper.emailsToCSV(emails)
+            # csv_bytes = io.BytesIO(csv_file.getvalue().encode('utf-8'))
+            await STATES[(user_id, message_id)]["msg"].edit_text(f"Процесс завершен:\n{emails}")
             await STATES[(user_id, message_id)]["msg"].edit_reply_markup()
+            # await STATES[(user_id, message_id)]['msg'].bot.send_document(
+            #     document=BufferedInputFile(csv_bytes.getvalue(), filename='data.csv'),
+            #     caption="Процесс завершен. Вот ваш файл CSV."
+            # )
         if (user_id, message_id) in TASKS:
             del TASKS[(user_id, message_id)]
         if (user_id, message_id) in STATES:
@@ -30,21 +40,21 @@ async def long_process(user_id: int, message_id: int):
 
 
 @router.message(Command("call"))
-async def call_command_handler(message: types.Message, command: CommandObject) -> None:
+async def call_command_handler(message: Message, command: CommandObject) -> None:
     if command.args:
-        parts = command.args.split(maxsplit=1)
+        parts = command.args.rsplit(maxsplit=1)
         if len(parts) == 2:
-            # key, value = parts
+            p1, p2 = parts
             user_id = message.from_user.id
             message_id = message.message_id
             TASKS[(user_id, message_id)] = create_task(long_process(user_id, message_id))
-            STATES[(user_id, message_id)] = {"state": "processing"}
+            STATES[(user_id, message_id)] = {"state": "processing", "query": p1, "limit": int(p2)}
             msg = await message.reply("Идет процесс обработки...", reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(text="Отмена", callback_data=f"cancel_{message_id}")
             ]]))
             STATES[(user_id, message_id)]["msg"] = msg
         else:
-            await message.reply("Пожалуйста, укажите ключ и значение.")
+            await message.reply("Пожалуйста, укажите запрос и лимит.")
     else:
         await message.reply("Нет аргументов.")
 
