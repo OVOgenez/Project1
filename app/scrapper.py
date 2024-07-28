@@ -7,16 +7,7 @@ import re
 import csv
 import io
 
-regex = re.compile(
-    r"(?i)"  # Case-insensitive matching
-    r"(?:[A-Z0-9!#$%&'*+/=?^_`{|}~-]+"  # Unquoted local part
-    r"(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*"  # Dot-separated atoms in local part
-    r"|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]"  # Quoted strings
-    r"|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")"  # Escaped characters in local part
-    r"@"  # Separator
-    r"[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?"  # Domain name
-    r"\.(?:[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)+"  # Top-level domain and subdomains
-)
+regex = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 
 async def emailsToCSV(email_dict):
@@ -36,7 +27,8 @@ async def fetch_emails_from_page(session, url):
             if response.status == 200:
                 text = await response.text()
                 soup = BeautifulSoup(text, 'html.parser')
-                emails.update(re.findall(regex, soup.get_text()))
+                for x in soup.strings:
+                    emails.update(re.findall(regex, x))
     except Exception as e:
         print(f"Error fetching {url}: {e}")
     return emails
