@@ -1,7 +1,7 @@
 from asyncio import sleep, create_task, CancelledError
 
 from aiogram import F, html, Router
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, BufferedInputFile
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command, CommandStart, CommandObject
 
 import app.scrapper as scrapper
@@ -24,8 +24,11 @@ async def long_process(user_id: int, message_id: int):
         emails = await scrapper.scrappQuery(data["query"], data["limit"])
         url = await table.initTable(f"{user_id}_{message_id}", emails)
         if STATES.get((user_id, message_id), {}).get("state") == "processing":
-            await STATES[(user_id, message_id)]["msg"].edit_text(f"Процесс завершен:\n{url}")
-            await STATES[(user_id, message_id)]["msg"].edit_reply_markup()
+            await STATES[(user_id, message_id)]["msg"].edit_text(
+                text=f"Процесс завершен:\n{url}",
+                reply_markup=None,
+                disable_web_page_preview=True
+            )
         if (user_id, message_id) in TASKS:
             del TASKS[(user_id, message_id)]
         if (user_id, message_id) in STATES:
@@ -44,9 +47,12 @@ async def call_command_handler(message: Message, command: CommandObject) -> None
             message_id = message.message_id
             TASKS[(user_id, message_id)] = create_task(long_process(user_id, message_id))
             STATES[(user_id, message_id)] = {"state": "processing", "query": p1, "limit": int(p2)}
-            msg = await message.reply("Идет процесс обработки...", reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Отмена", callback_data=f"cancel_{message_id}")
-            ]]))
+            msg = await message.reply(
+                text="Идет процесс обработки...",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="Отмена", callback_data=f"cancel_{message_id}")
+                ]])
+            )
             STATES[(user_id, message_id)]["msg"] = msg
         else:
             await message.reply("Пожалуйста, укажите запрос и лимит.")
