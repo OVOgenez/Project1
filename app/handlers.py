@@ -1,4 +1,4 @@
-from asyncio import sleep, create_task, CancelledError
+import asyncio
 
 from aiogram import F, html, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -8,6 +8,9 @@ import app.scrapper as scrapper
 import app.table as table
 
 router = Router()
+semaphore = asyncio.Semaphore()
+
+# PROCESSES: dict[tuple[int, int]: asyncio.Task] = {}
 
 STATES = {}
 TASKS = {}
@@ -19,22 +22,24 @@ async def command_start_handler(message: Message) -> None:
 
 
 async def long_process(user_id: int, message_id: int):
-    try:
-        data = STATES[(user_id, message_id)]
-        emails = await scrapper.scrappQuery(data["query"], data["limit"])
-        url = await table.initTable(f"{user_id}_{message_id}", emails)
-        if STATES.get((user_id, message_id), {}).get("state") == "processing":
-            await STATES[(user_id, message_id)]["msg"].edit_text(
-                text=f"Процесс завершен:\n{url}",
-                reply_markup=None,
-                disable_web_page_preview=True
-            )
-        if (user_id, message_id) in TASKS:
-            del TASKS[(user_id, message_id)]
-        if (user_id, message_id) in STATES:
-            del STATES[(user_id, message_id)]
-    except CancelledError:
-        pass
+    async with semaphore:
+        try:
+            data = STATES[(user_id, message_id)]
+            emails = await scrapper.scrappQuery(data["query"], data["limit"])
+            url = await table.initTable(f"{user_id}_{message_id}", data["query"], emails)
+            if STATES.get((user_id, message_id), {}).get("state") == "processing":
+                await STATES[(user_id, message_id)]["msg"].edit_text(
+                    text=f"Процесс завершен: {url}",
+                    reply_markup=None,
+                    disable_web_page_preview=True
+                )
+            if (user_id, message_id) in TASKS:
+                del TASKS[(user_id, message_id)]
+            if (user_id, message_id) in STATES:
+                del STATES[(user_id, message_id)]
+        # except asyncio.CancelledError:
+        except:
+            pass
 
 
 @router.message(Command("call"))
@@ -45,7 +50,6 @@ async def call_command_handler(message: Message, command: CommandObject) -> None
             p1, p2 = parts
             user_id = message.from_user.id
             message_id = message.message_id
-            TASKS[(user_id, message_id)] = create_task(long_process(user_id, message_id))
             STATES[(user_id, message_id)] = {"state": "processing", "query": p1, "limit": int(p2)}
             msg = await message.reply(
                 text="Идет процесс обработки...",
@@ -54,6 +58,7 @@ async def call_command_handler(message: Message, command: CommandObject) -> None
                 ]])
             )
             STATES[(user_id, message_id)]["msg"] = msg
+            TASKS[(user_id, message_id)] = asyncio.create_task(long_process(user_id, message_id))
         else:
             await message.reply("Пожалуйста, укажите запрос и лимит.")
     else:
@@ -91,4 +96,4 @@ async def process_callback_execute(callback_query: CallbackQuery):
             ]])
         )
         await callback_query.answer(text="Процесс начат заново")
-        TASKS[(user_id, message_id)] = create_task(long_process(user_id, message_id))
+        TASKS[(user_id, message_id)] = asyncio.create_task(long_process(user_id, message_id))
