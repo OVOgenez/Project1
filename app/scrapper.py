@@ -96,7 +96,7 @@ async def search_google(session, query, limit):
             return
         await asyncio.sleep(1)
 
-async def scrappQuery(query: str, limit: int) -> list[SiteData]:
+async def scrappQuery(query: str, limit: int = 1000) -> list[SiteData]:
     results = []
     black = set()
     connector = aiohttp.TCPConnector(limit=1000, ssl=False) 

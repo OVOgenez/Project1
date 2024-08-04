@@ -10,7 +10,7 @@ import app.table as table
 router = Router()
 semaphore = asyncio.Semaphore()
 
-# PROCESSES: dict[tuple[int, int]: asyncio.Task] = {}
+# PROCESSES: dict[tuple[int, int, int]: asyncio.Task] = {}
 
 STATES = {}
 TASKS = {}
@@ -25,7 +25,7 @@ async def long_process(user_id: int, message_id: int):
     async with semaphore:
         try:
             data = STATES[(user_id, message_id)]
-            emails = await scrapper.scrappQuery(data["query"], data["limit"])
+            emails = await scrapper.scrappQuery(data["query"])
             url = await table.initTable(f"{user_id}_{message_id}", data["query"], emails)
             if STATES.get((user_id, message_id), {}).get("state") == "processing":
                 await STATES[(user_id, message_id)]["msg"].edit_text(
@@ -45,22 +45,17 @@ async def long_process(user_id: int, message_id: int):
 @router.message(Command("call"))
 async def call_command_handler(message: Message, command: CommandObject) -> None:
     if command.args:
-        parts = command.args.rsplit(maxsplit=1)
-        if len(parts) == 2:
-            p1, p2 = parts
-            user_id = message.from_user.id
-            message_id = message.message_id
-            STATES[(user_id, message_id)] = {"state": "processing", "query": p1, "limit": int(p2)}
-            msg = await message.reply(
-                text="Идет процесс обработки...",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="Отмена", callback_data=f"cancel_{message_id}")
-                ]])
-            )
-            STATES[(user_id, message_id)]["msg"] = msg
-            TASKS[(user_id, message_id)] = asyncio.create_task(long_process(user_id, message_id))
-        else:
-            await message.reply("Пожалуйста, укажите запрос и лимит.")
+        user_id = message.from_user.id
+        message_id = message.message_id
+        STATES[(user_id, message_id)] = {"state": "processing", "query": command.args}
+        msg = await message.reply(
+            text="Идет процесс обработки...",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Отмена", callback_data=f"cancel_{message_id}")
+            ]])
+        )
+        STATES[(user_id, message_id)]["msg"] = msg
+        TASKS[(user_id, message_id)] = asyncio.create_task(long_process(user_id, message_id))
     else:
         await message.reply("Нет аргументов.")
 
