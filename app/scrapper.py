@@ -5,7 +5,7 @@ import urllib
 import re
 
 CONTACTS = {"", "contact", "contact-us", "about", "about-us", "support", "help"}
-EXTENSIONS = {"io", "webp", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
+EXTENSIONS = {"webp", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
 REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 class SiteData:

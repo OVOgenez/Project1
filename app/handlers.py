@@ -10,10 +10,7 @@ import app.table as table
 router = Router()
 semaphore = asyncio.Semaphore()
 
-# PROCESSES: dict[tuple[int, int, int]: asyncio.Task] = {}
-
-STATES = {}
-TASKS = {}
+TASKS: dict[tuple[int, int]: asyncio.Task] = {}
 
 
 @router.message(CommandStart())
@@ -21,73 +18,91 @@ async def command_start_handler(message: Message) -> None:
     await message.answer(f"Hello, {html.bold(message.from_user.full_name)}!")
 
 
-async def long_process(user_id: int, message_id: int):
+async def long_process(message: Message, query: str):
     async with semaphore:
         try:
-            data = STATES[(user_id, message_id)]
-            emails = await scrapper.scrappQuery(data["query"])
-            url = await table.initTable(f"{user_id}_{message_id}", data["query"], emails)
-            if STATES.get((user_id, message_id), {}).get("state") == "processing":
-                await STATES[(user_id, message_id)]["message"].edit_text(
-                    text=f"Процесс завершен: {url}",
+            chat_id = message.chat.id
+            message_id = message.message_id
+            emails = await scrapper.scrappQuery(query)
+            link = await table.initTable(f"{chat_id}_{message_id}", query, emails)
+            text = [
+                f"{html.bold("Query:")} {query}",
+                f"",
+                f"✅ {html.bold("Completed:")} {link}",
+            ]
+            if (chat_id, message_id) in TASKS:
+                del TASKS[(chat_id, message_id)]
+                await message.edit_text(
+                    text="\n".join(text),
                     reply_markup=None,
                     disable_web_page_preview=True
                 )
-            if (user_id, message_id) in TASKS:
-                del TASKS[(user_id, message_id)]
-            if (user_id, message_id) in STATES:
-                del STATES[(user_id, message_id)]
         # except asyncio.CancelledError:
         except:
             pass
 
 
-@router.message(Command("call"))
-async def call_command_handler(message: Message, command: CommandObject) -> None:
+@router.message(Command("search"))
+async def search_command_handler(message: Message, command: CommandObject) -> None:
     if command.args:
+        query = command.args
+        text = [
+            f"{html.bold("Query:")} {query}",
+            f"",
+            f"⏳ {html.bold("Executing...")}",
+        ]
         reply = await message.reply(
-            text="Идет процесс обработки...",
+            text="\n".join(text),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="Отмена", callback_data="cancel")
+                InlineKeyboardButton(text="Abort", callback_data="abort")
             ]])
         )
-        user_id = message.from_user.id
+        chat_id = reply.chat.id
         message_id = reply.message_id
-        STATES[(user_id, message_id)] = {"message": reply, "query": command.args, "state": "processing"}
-        TASKS[(user_id, message_id)] = asyncio.create_task(long_process(user_id, message_id))
+        TASKS[(chat_id, message_id)] = asyncio.create_task(long_process(reply, query))
     else:
-        await message.reply("Нет аргументов.")
+        await message.reply(html.bold("Empty query."))
 
 
-@router.callback_query(F.data == "cancel")
-async def process_callback_cancel(callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    message_id = callback_query.message.message_id
-    if STATES.get((user_id, message_id), {}).get("state") == "processing":
-        STATES[(user_id, message_id)]["state"] = "cancelled"
-        await callback_query.message.edit_text(
-            text="Процесс был отменен. Нажмите 'Запуск', чтобы начать снова.",
+@router.callback_query(F.data == "abort")
+async def abort_callback_query_handler(callback_query: CallbackQuery):
+    message = callback_query.message
+    chat_id = message.chat.id
+    message_id = message.message_id
+    if (chat_id, message_id) in TASKS:
+        query = message.text.split("\n", 1)[0].split(": ", 1)[-1]
+        TASKS.pop((chat_id, message_id)).cancel()
+        text = [
+            f"{html.bold("Query:")} {query}",
+            f"",
+            f"❌ {html.bold("Aborted.")}",
+        ]
+        await message.edit_text(
+            text="\n".join(text),
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Запуск", callback_data="execute")
+                inline_keyboard=[[InlineKeyboardButton(text="Execute", callback_data="execute")
             ]])
         )
-        await callback_query.answer(text="Процесс отменен")
-        if (user_id, message_id) in TASKS:
-            TASKS[(user_id, message_id)].cancel()
-            del TASKS[(user_id, message_id)]
+        await callback_query.answer(text="Process aborted")
 
 
 @router.callback_query(F.data == "execute")
-async def process_callback_execute(callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    message_id = callback_query.message.message_id
-    if STATES.get((user_id, message_id), {}).get("state") == "cancelled":
-        STATES[(user_id, message_id)]["state"] = "processing"
-        await callback_query.message.edit_text(
-            text="Идет процесс обработки...",
+async def execute_callback_query_handler(callback_query: CallbackQuery):
+    message = callback_query.message
+    chat_id = message.chat.id
+    message_id = message.message_id
+    if (chat_id, message_id) not in TASKS:
+        query = message.text.split("\n", 1)[0].split(": ", 1)[-1]
+        TASKS[(chat_id, message_id)] = asyncio.create_task(long_process(message, query))
+        text = [
+            f"{html.bold("Query:")} {query}",
+            f"",
+            f"⏳ {html.bold("Executing...")}",
+        ]
+        await message.edit_text(
+            text="\n".join(text),
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Отмена", callback_data="cancel")
+                inline_keyboard=[[InlineKeyboardButton(text="Abort", callback_data="abort")
             ]])
         )
-        await callback_query.answer(text="Процесс начат заново")
-        TASKS[(user_id, message_id)] = asyncio.create_task(long_process(user_id, message_id))
+        await callback_query.answer(text="Process executed")
