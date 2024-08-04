@@ -28,7 +28,7 @@ async def long_process(user_id: int, message_id: int):
             emails = await scrapper.scrappQuery(data["query"])
             url = await table.initTable(f"{user_id}_{message_id}", data["query"], emails)
             if STATES.get((user_id, message_id), {}).get("state") == "processing":
-                await STATES[(user_id, message_id)]["msg"].edit_text(
+                await STATES[(user_id, message_id)]["message"].edit_text(
                     text=f"Процесс завершен: {url}",
                     reply_markup=None,
                     disable_web_page_preview=True
@@ -45,31 +45,30 @@ async def long_process(user_id: int, message_id: int):
 @router.message(Command("call"))
 async def call_command_handler(message: Message, command: CommandObject) -> None:
     if command.args:
-        user_id = message.from_user.id
-        message_id = message.message_id
-        STATES[(user_id, message_id)] = {"state": "processing", "query": command.args}
-        msg = await message.reply(
+        reply = await message.reply(
             text="Идет процесс обработки...",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="Отмена", callback_data=f"cancel_{message_id}")
+                InlineKeyboardButton(text="Отмена", callback_data="cancel")
             ]])
         )
-        STATES[(user_id, message_id)]["msg"] = msg
+        user_id = message.from_user.id
+        message_id = reply.message_id
+        STATES[(user_id, message_id)] = {"message": reply, "query": command.args, "state": "processing"}
         TASKS[(user_id, message_id)] = asyncio.create_task(long_process(user_id, message_id))
     else:
         await message.reply("Нет аргументов.")
 
 
-@router.callback_query(F.data.startswith("cancel_"))
+@router.callback_query(F.data == "cancel")
 async def process_callback_cancel(callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
-    message_id = int(callback_query.data.split("_")[1])
+    message_id = callback_query.message.message_id
     if STATES.get((user_id, message_id), {}).get("state") == "processing":
         STATES[(user_id, message_id)]["state"] = "cancelled"
         await callback_query.message.edit_text(
             text="Процесс был отменен. Нажмите 'Запуск', чтобы начать снова.",
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Запуск", callback_data=f"execute_{message_id}")
+                inline_keyboard=[[InlineKeyboardButton(text="Запуск", callback_data="execute")
             ]])
         )
         await callback_query.answer(text="Процесс отменен")
@@ -78,16 +77,16 @@ async def process_callback_cancel(callback_query: CallbackQuery):
             del TASKS[(user_id, message_id)]
 
 
-@router.callback_query(F.data.startswith("execute_"))
+@router.callback_query(F.data == "execute")
 async def process_callback_execute(callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
-    message_id = int(callback_query.data.split("_")[1])
+    message_id = callback_query.message.message_id
     if STATES.get((user_id, message_id), {}).get("state") == "cancelled":
         STATES[(user_id, message_id)]["state"] = "processing"
         await callback_query.message.edit_text(
             text="Идет процесс обработки...",
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Отмена", callback_data=f"cancel_{message_id}")
+                inline_keyboard=[[InlineKeyboardButton(text="Отмена", callback_data="cancel")
             ]])
         )
         await callback_query.answer(text="Процесс начат заново")

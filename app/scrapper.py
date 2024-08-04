@@ -5,7 +5,7 @@ import urllib
 import re
 
 CONTACTS = {"", "contact", "contact-us", "about", "about-us", "support", "help"}
-EXTENSIONS = {"webp", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
+EXTENSIONS = {"io", "webp", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
 REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 class SiteData:
@@ -27,7 +27,10 @@ def find_emails(data):
     else:
         for i in re.findall(REGEX, data):
             if i.rsplit('.', 1)[-1].lower() not in EXTENSIONS:
-                emails.add(i)
+                if i[:3] == "u00":
+                    emails.add(i[5:])
+                else:
+                    emails.add(i)
     return emails
 def find_emails_list(data: list):
     return [find_emails(i) for i in data]
