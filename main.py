@@ -1,6 +1,6 @@
 import asyncio
-# import logging
-# import sys
+import logging
+import sys
 import config
 
 from aiogram import Bot, Dispatcher
@@ -15,13 +15,14 @@ dp = Dispatcher()
 dp.include_router(router)
 
 @dp.errors()
-async def error_handler(exception: ErrorEvent) -> any: pass
+async def error_handler(exception: ErrorEvent) -> any:
+    logging.warn(exception)
 
 async def main():
     await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
-    # logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

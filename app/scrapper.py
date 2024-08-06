@@ -3,9 +3,11 @@ import aiohttp
 from bs4 import BeautifulSoup
 import urllib
 import re
+import sys
+import logging
 
 CONTACTS = {"", "contact", "contact-us", "about", "about-us", "support", "help"}
-EXTENSIONS = {"webp", "mp3", "wav", "mp4", "avi", "avif", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
+EXTENSIONS = {"html", "css", "js", "php", "local", "webp", "mp3", "wav", "mp4", "avi", "avif", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
 REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 class SiteData:
@@ -41,11 +43,11 @@ def parse_html(data):
 async def fetch_url(session, url, proxy=None, params=None, headers=None):
     try:
         async with session.get(url=url, proxy=proxy, params=params, headers=headers) as response:
+            # logging.info(response.status)
             if response.status == 200:
-                # print(url)
                 return await response.text()
     except Exception as e:
-        # print(f"Error fetching {url}: {e}")
+        # logging.info(e)
         pass
     return ""
 
@@ -79,13 +81,13 @@ async def search_google(session, query, limit):
                 sites.append(SiteData(url, title, description))
         return sites
 
-    _query = urllib.parse.quote_plus(query)
+    # _query = urllib.parse.quote_plus(query)
     start = 0
     while True:
         url = "https://www.google.com/search"
         proxy = None
         params = {
-            "q": _query,
+            "q": query,
             "num": min(100, limit - start + 2),
             "start": start,
         }
@@ -106,10 +108,16 @@ async def search_google(session, query, limit):
 async def scrappQuery(query: str, limit: int = 1000) -> list[SiteData]:
     results = []
     black = set()
-    connector = aiohttp.TCPConnector(limit=1000, ssl=False) 
-    timeout = aiohttp.ClientTimeout(total=300, sock_connect=30)
+    connector = aiohttp.TCPConnector(limit=100, ssl=False) 
+    timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=True) as session:
         async for sites in search_google(session, query, limit):
-            tasks = [process_site(session, site, black) for site in sites]
-            results += await asyncio.gather(*tasks)
+            for i in range(0, len(sites), 10):
+                sites_batch = sites[i:i + 10]
+                tasks = [process_site(session, site, black) for site in sites_batch]
+                results += await asyncio.gather(*tasks)
     return results
+
+# if __name__ == "__main__":
+#     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+#     asyncio.run(scrappQuery("Spécialiste des maisons en bois et saunas"))
