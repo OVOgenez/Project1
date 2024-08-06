@@ -5,7 +5,7 @@ import urllib
 import re
 
 CONTACTS = {"", "contact", "contact-us", "about", "about-us", "support", "help"}
-EXTENSIONS = {"webp", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
+EXTENSIONS = {"webp", "mp3", "wav", "mp4", "avi", "avif", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
 REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 class SiteData:
@@ -42,10 +42,11 @@ async def fetch_url(session, url, proxy=None, params=None, headers=None):
     try:
         async with session.get(url=url, proxy=proxy, params=params, headers=headers) as response:
             if response.status == 200:
-                print(url)
+                # print(url)
                 return await response.text()
     except Exception as e:
-        print(f"Error fetching {url}: {e}")
+        # print(f"Error fetching {url}: {e}")
+        pass
     return ""
 
 async def process_site(session, site, black: set):
@@ -69,9 +70,12 @@ async def search_google(session, query, limit):
             url = _url["href"] if _url else None
             if url:
                 _title = block.find("h3")
-                _description = block.find("div", {"style": "-webkit-line-clamp:2"})
                 title = _title.text if _title else ""
-                description = _description.text if _description else ""
+                _description_box = block.find("div", {"style": "-webkit-line-clamp:2"})
+                description = ""
+                if _description_box:
+                    _description = _description_box.find_all(recursive=False)
+                    description = _description[-1].text if _description else ""
                 sites.append(SiteData(url, title, description))
         return sites
 
@@ -92,11 +96,11 @@ async def search_google(session, query, limit):
         soup = await asyncio.to_thread(parse_html, html)
         sites = await asyncio.to_thread(find_sites, soup)
         if len(sites) == 0:
-            return
+            break
         yield sites
         start += len(sites)
         if start >= limit:
-            return
+            break
         await asyncio.sleep(1)
 
 async def scrappQuery(query: str, limit: int = 1000) -> list[SiteData]:
@@ -106,7 +110,6 @@ async def scrappQuery(query: str, limit: int = 1000) -> list[SiteData]:
     timeout = aiohttp.ClientTimeout(total=300, sock_connect=30)
     async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=True) as session:
         async for sites in search_google(session, query, limit):
-            print(len(sites))
             tasks = [process_site(session, site, black) for site in sites]
             results += await asyncio.gather(*tasks)
     return results
