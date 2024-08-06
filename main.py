@@ -1,9 +1,7 @@
 import asyncio
 import logging
 import sys
-import os
-
-from dotenv import load_dotenv
+import config
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -12,10 +10,7 @@ from aiogram.types import ErrorEvent
 
 from app.handlers import router
 
-load_dotenv()
-TOKEN = os.getenv("TOKEN")
-
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 dp.include_router(router)
 

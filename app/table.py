@@ -1,13 +1,14 @@
 import asyncio
 import gspread
+import config
 
 import app.scrapper as scrapper
 
-gc = gspread.service_account("service_account.json")
+gc = gspread.service_account_from_dict(config.credentials_info)
 
 
 def _initTable(name: str, title: str, data: list[scrapper.SiteData]) -> str:
-    spreadsheet = gc.create(name, "142kbbNhkNkte5dx0Dg-r6zq-60pL3y7L")
+    spreadsheet = gc.create(name, config.DATA_FOLDER)
     worksheet = spreadsheet.sheet1
     worksheet.update_title(title)
     worksheet.update([["URL", "TITLE", "DESCRIPTION", "EMAILS"]] + [[i.url, i.title, i.description, *i.emails] for i in data])
