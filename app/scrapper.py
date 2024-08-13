@@ -3,11 +3,10 @@ import aiohttp
 from bs4 import BeautifulSoup
 import urllib
 import re
-import sys
 import logging
 
 CONTACTS = {"", "contact", "contact-us", "about", "about-us", "support", "help"}
-EXTENSIONS = {"html", "css", "js", "php", "local", "webp", "mp3", "wav", "mp4", "avi", "avif", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
+EXTENSIONS = {"html", "css", "js", "php", "local", "webpack", "webp", "mp3", "wav", "mp4", "avi", "avif", "svg", "png", "jpg", "jpeg", "gif", "bmp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z"}
 REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 class SiteData:
@@ -31,6 +30,8 @@ def find_emails(data):
             if i.rsplit('.', 1)[-1].lower() not in EXTENSIONS:
                 if i[:3] == "u00":
                     emails.add(i[5:])
+                elif i[0] == "%":
+                    emails.add(i[3:])
                 else:
                     emails.add(i)
     return emails
@@ -58,6 +59,13 @@ async def process_site(session, site, black: set):
     else:
         black.add(root)
         htmls = await asyncio.gather(fetch_url(session, site.url), *[fetch_url(session, urllib.parse.urljoin(site.url, f"/{i}")) for i in CONTACTS])
+    # soup = await asyncio.to_thread(parse_html, htmls[0])
+    # title = soup.title
+    # if title:
+    #     site.title = title.string
+    # description = soup.find("meta", attrs={"name": "description"})
+    # if description and "content" in description.attrs:
+    #     site.description = description["content"]
     emails = await asyncio.to_thread(find_emails_list, htmls)
     site.emails = set.union(*emails)
     return site
@@ -108,7 +116,7 @@ async def search_google(session, query, limit):
 async def scrappQuery(query: str, limit: int = 1000) -> list[SiteData]:
     results = []
     black = set()
-    connector = aiohttp.TCPConnector(limit=100, ssl=False) 
+    connector = aiohttp.TCPConnector(ssl=False) 
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=True) as session:
         async for sites in search_google(session, query, limit):
@@ -119,5 +127,8 @@ async def scrappQuery(query: str, limit: int = 1000) -> list[SiteData]:
     return results
 
 # if __name__ == "__main__":
+#     import sys
 #     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-#     asyncio.run(scrappQuery("Spécialiste des maisons en bois et saunas"))
+#     results = asyncio.run(scrappQuery("Spécialiste des maisons en bois et saunas", 10))
+#     for i in results:
+#         print(i)
